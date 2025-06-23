@@ -33,7 +33,7 @@ import urllib3
 def debug_wrap(function):
     @functools.wraps(function)
     def wrapper(*args, **kwargs):
-        print(function.__name__)
+        print(function.__name__, flush=True)
         return function(*args, **kwargs)
     return wrapper
 
@@ -77,7 +77,7 @@ def finder_maker(max_size=100, min_size=0, min_sep_from_edge=50, min_flux=500,
         """
         Wrap the star finder to reject bad stars
         """
-        saturated = (data==0)
+        saturated = np.logical_or((data==0), np.isnan(data))
         if not np.any(saturated):
             raise ValueError("No saturated (data==0) pixels found")
         sources_, nsources_ = label(saturated)
@@ -95,7 +95,7 @@ def finder_maker(max_size=100, min_size=0, min_sep_from_edge=50, min_flux=500,
 
         # now re-calculate sources
         sources, nsources = label(no_edge_saturated)
-        print(f"Reduced nsources from {nsources_} to {nsources} by excluding edge zone with size {msfe}")
+        print(f"Reduced nsources from {nsources_} to {nsources} by excluding edge zone with size {msfe}", flush=True)
         if raise_for_nosources and nsources == 0:
             raise ValueError("No saturated sources found")
 
@@ -123,8 +123,8 @@ def finder_maker(max_size=100, min_size=0, min_sep_from_edge=50, min_flux=500,
         is_star_ok = np.array([szok and is_star(data, sources, srcid+1, slcs, min_flux=min_flux, rindsize=rindsize)
                                for srcid, (szok, slcs) in enumerate(pb(zip(all_ok, slices)))])
         all_ok &= is_star_ok
-        print(f"inside saturated_finder, with minmax nsaturated = {min_size,max_size} and min_flux={min_flux}, number of is_star={is_star_ok.sum()}, ", end="")
-        print(f"sizes={sizes_ok.sum()}, centerofmass_finite={coms_finite.sum()}, coms_inbounds={coms_inbounds.sum()}, total={all_ok.sum()} candidates")
+        print(f"inside saturated_finder, with minmax nsaturated = {min_size,max_size} and min_flux={min_flux}, number of is_star={is_star_ok.sum()}, ", end="", flush=True)
+        print(f"sizes={sizes_ok.sum()}, centerofmass_finite={coms_finite.sum()}, coms_inbounds={coms_inbounds.sum()}, total={all_ok.sum()} candidates", flush=True)
 
 
         tbl = Table()
@@ -147,7 +147,7 @@ def get_psf(header, path_prefix='.'):
     module = header['MODULE']
 
     ww = wcs.WCS(header)
-    assert ww.wcs.cdelt[1] != 1
+    #assert ww.wcs.cdelt[1] != 1
 
     psfgen.filter = filtername
     obsdate = header['DATE-OBS']
@@ -159,7 +159,7 @@ def get_psf(header, path_prefix='.'):
     loaded_psfgen = False
     ntries = 0
     while not loaded_psfgen:
-        print(f"Attempting to load PSF for {obsdate}")
+        print(f"Attempting to load PSF for {obsdate}", flush=True)
         try:
             Mast.login(api_token.strip())
             os.environ['MAST_API_TOKEN'] = api_token.strip()
@@ -167,10 +167,10 @@ def get_psf(header, path_prefix='.'):
             psfgen.load_wss_opd_by_date(f'{obsdate}T00:00:00')
             loaded_psfgen = True
         except (urllib3.exceptions.ReadTimeoutError, requests.exceptions.ReadTimeout, requests.HTTPError) as ex:
-            print(f"Failed to build PSF: {ex}")
+            print(f"Failed to build PSF: {ex}", flush=True)
         except Exception as ex:
-            print("psfgen load_wss_opd_by_date failed")
-            print(ex)
+            print("psfgen load_wss_opd_by_date failed", flush=True)
+            print(ex, flush=True)
         ntries += 1
         if ntries > 10:
             raise ValueError("Could not download in 10 tries")
@@ -186,14 +186,14 @@ def get_psf(header, path_prefix='.'):
         if os.path.exists(psf_fn):
             psf_fn = merged_psf_fn
         else:
-            print("webbPSF is being used for merged data because merged PSF does not exist")
+            print("webbPSF is being used for merged data because merged PSF does not exist", flush=True)
 
     if os.path.exists(str(psf_fn)):
         # As a file
         log.info(f"Loading grid from psf_fn={psf_fn}")
         big_grid = to_griddedpsfmodel(psf_fn)  # file created 2 cells above
         if isinstance(big_grid, list):
-            print(f"PSF IS A LIST OF GRIDS!!!")
+            print(f"PSF IS A LIST OF GRIDS!!!", flush=True)
             big_grid = big_grid[0]
     else:
         log.info(f"starfinding: Calculating grid for psf_fn={psf_fn}")
@@ -206,7 +206,7 @@ def get_psf(header, path_prefix='.'):
         # now the PSF should be written
         assert glob.glob(psf_fn.replace(".fits", "*"))
         if isinstance(big_grid, list):
-            print(f"PSF FROM PSF_GEN IS A LIST OF GRIDS!!!")
+            print(f"PSF FROM PSF_GEN IS A LIST OF GRIDS!!!", flush=True)
             big_grid = big_grid[0]
             # if we really want to get this right, we need to create a new grid of PSF models
             # that is some sort of average of the PSF model grid.
@@ -302,7 +302,7 @@ def iteratively_remove_saturated_stars(data, header,
         finder = finder_maker(min_size=minsz, max_size=maxsz, require_gradient=grad, min_flux=minflx)
 
         # do the search on data b/c PSF subtraction can change zeros to non-zeros
-        if np.any(resid == 0):
+        if np.any(np.logical_or(resid == 0, np.isnan(resid))):
             sources = finder(resid,
                              mask=ndimage.binary_dilation(resid==0, iterations=1),
                              raise_for_nosources=False, rindsize=rsz)
@@ -315,7 +315,7 @@ def iteratively_remove_saturated_stars(data, header,
             continue
 
         if verbose:
-            print(f"Before BasicPSFPhotometry: {len(sources)} sources.  min,max sz: {minsz,maxsz}  minflx={minflx}, grad={grad}, fitsz={fitsz}, apsz={apsz}, diliter={diliter}")
+            print(f"Before BasicPSFPhotometry: {len(sources)} sources.  min,max sz: {minsz,maxsz}  minflx={minflx}, grad={grad}, fitsz={fitsz}, apsz={apsz}, diliter={diliter}", flush=True)
 
         phot = PSFPhotometry(finder=finder,
                              grouper=daogroup,
@@ -329,22 +329,22 @@ def iteratively_remove_saturated_stars(data, header,
 
         # Mask out the inner portion of the PSF when fitting it
         if diliter > 0:
-            mask = ndimage.binary_dilation(resid==0, iterations=diliter)
+            mask = ndimage.binary_dilation(np.logical_or(resid==0, np.isnan(resid)), iterations=diliter)
         else:
-            mask = resid==0
+            mask = np.logical_or(resid==0, np.isnan(resid))
 
         #log.info("Doing photometry")
         try:
-            print(f'Before trying with progressbar: resid shape={resid.shape}, mask shape={mask.shape}')
+            print(f'Before trying with progressbar: resid shape={resid.shape}, mask shape={mask.shape}', flush=True)
             result = phot(resid, mask=mask, progressbar=tqdm)
         except TypeError:
-            print(f'Before trying without: resid shape={resid.shape}, mask shape={mask.shape}')
+            print(f'Before trying without: resid shape={resid.shape}, mask shape={mask.shape}', flush=True)
             result = phot(resid, mask=mask)
 
         result['skycoord_fit'] = ww.pixel_to_world(result['x_fit'], result['y_fit'])
         results.append(result)
         #log.info(f"Done; len(result) = {len(result)})")
-        print(result)
+        print(result, flush=True)
 
         # manually subtract off PSFs because get_residual_image seems to (never?) work
         # (it might work but I just had other errors masking that it was working, but this is fine - it's just more manual steps)
@@ -381,18 +381,19 @@ def remove_saturated_stars(filename, save_suffix='_unsatstar', **kwargs):
     fh.writeto(filename.replace(".fits", save_suffix+".fits"), overwrite=True)
 
 
-def main():
+def main(): 
 
-    with open(os.path.expanduser('/home/adamginsburg/.mast_api_token'), 'r') as fh:
+    with open(os.path.expanduser('/home/savannahgramze/.mast_api_token'), 'r') as fh:
         api_token = fh.read().strip()
     from astroquery.mast import Mast
     Mast.login(api_token.strip())
     os.environ['MAST_API_TOKEN'] = api_token.strip()
 
-    for module in ('nrca', 'nrcb', 'merged'):
-        for fn in glob.glob(f"/orange/adamginsburg/jwst/brick/F*/pipeline/*-{module}_i2d.fits"):
-            remove_saturated_stars(fn)
-
+    #for module in ('nrca', 'nrcb', 'merged'):
+        #for fn in glob.glob(f"/orange/adamginsburg/jwst/brick/F*/pipeline/*-{module}_i2d.fits"):
+        #    remove_saturated_stars(fn)
+    fn = '/orange/adamginsburg/jwst/cloudc/F405N/pipeline/jw02221002001_02201_00001_nrcalong_destreak_o002_crf.fits'
+    remove_saturated_stars(fn, verbose=True)
 
 if __name__ == "__main__":
     main()
