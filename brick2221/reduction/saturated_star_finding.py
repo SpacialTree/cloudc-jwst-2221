@@ -264,6 +264,7 @@ def iteratively_remove_saturated_stars(data, header,
         often unreliable.  This is probably most important for aperture
         photometry, but it likely also affects PSF fitting.
     """
+    print("Beginning to iteratively remove saturated stars", flush=True)
 
     assert len(fit_sizes) == len(nsaturated) == len(min_flux) == len(ap_rad) == len(dilations) == len(require_gradient)
 
@@ -306,6 +307,7 @@ def iteratively_remove_saturated_stars(data, header,
             sources = finder(resid,
                              mask=ndimage.binary_dilation(resid==0, iterations=1),
                              raise_for_nosources=False, rindsize=rsz)
+            print(f"Found {len(sources)} sources running finder {finder}", flush=True)
         else:
             log.warning(f"Skipped iteration with fit size={fitsz}, range={minsz}-{maxsz} because there are no saturated pixels")
             continue
@@ -349,6 +351,7 @@ def iteratively_remove_saturated_stars(data, header,
         # manually subtract off PSFs because get_residual_image seems to (never?) work
         # (it might work but I just had other errors masking that it was working, but this is fine - it's just more manual steps)
         #resid = subtract_psf(resid, phot.psf_model, result['x_fit', 'y_fit', 'flux_fit'], subshape=phot.fitshape)
+        print(f"Making residual image.", flush=True)
         resid = phot.make_residual_image(resid, (fitsz, fitsz), include_localbkg=False)
 
         # reset saturated pixels back to zero
@@ -356,6 +359,7 @@ def iteratively_remove_saturated_stars(data, header,
 
         # an option here, to make this work at an earlier phase in the pipeline, is to *replace* the masked
         # pixels with the values from the fitted model.  This will be tricky.
+        print(f"Finished iteration with fit size={fitsz}, range={minsz}-{maxsz} with {len(result)} sources", flush=True)
 
     final_table = table.vstack(results)
 
@@ -373,8 +377,10 @@ def remove_saturated_stars(filename, save_suffix='_unsatstar', **kwargs):
     header = fh[0].header
     if 'CRPIX1' not in header:
         header.update(wcs.WCS(fh['SCI'].header).to_header())
+    print("Running iteratively_remove_saturated_stars", flush=True)
     satstar_table, satstar_resid = iteratively_remove_saturated_stars(data, header, **kwargs)
     satstar_table.meta.update(header)
+    print("Finished iteratively_remove_saturated_stars", flush=True)
 
     satstar_table.write(filename.replace(".fits", '_satstar_catalog.fits'), overwrite=True)
     fh['SCI'].data = satstar_resid
