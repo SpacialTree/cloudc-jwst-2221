@@ -172,15 +172,11 @@ def get_psf(header, path_prefix='.'):
     module = header['MODULE']
 
     ww = wcs.WCS(header)
-<<<<<<< HEAD
-    #assert ww.wcs.cdelt[1] != 1
-=======
     try:
         assert ww.wcs.cdelt[1] != 1, "This is not a valid WCS!!! CDELT is wrong!! how did this HAPPEN!?!?"
     except AssertionError as ex:
         print(ex)
         print("ignoring WCS failure so check that stuff is right...")
->>>>>>> b0f29adb99fc78f846442b2515bd0f6cc5726ce3
 
     psfgen.filter = filtername
     obsdate = header['DATE-OBS']
