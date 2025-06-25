@@ -431,8 +431,12 @@ def main():
     #for module in ('nrca', 'nrcb', 'merged'):
         #for fn in glob.glob(f"/orange/adamginsburg/jwst/brick/F*/pipeline/*-{module}_i2d.fits"):
         #    remove_saturated_stars(fn)
-    fn = '/orange/adamginsburg/jwst/cloudc/F405N/pipeline/jw02221002001_02201_00001_nrcalong_destreak_o002_crf.fits'
-    remove_saturated_stars(fn, verbose=True)
+    #fn = '/orange/adamginsburg/jwst/cloudc/F405N/pipeline/jw02221002001_02201_00001_nrcalong_destreak_o002_crf.fits'
+    #remove_saturated_stars(fn, verbose=True)
+
+    for fn in glob.glob('/orange/adamginsburg/jwst/cloudc/F405N/pipeline/*_destreak_o002_crf.fits'):
+        print(f"Processing {fn}", flush=True)
+        remove_saturated_stars(fn, verbose=True)
 
 if __name__ == "__main__":
     main()
