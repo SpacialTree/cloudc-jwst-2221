@@ -64,7 +64,7 @@ def is_star(data, sources, srcid, slc, rindsize=3, min_flux=500, require_gradien
 
     return ((rind1sum > rind2sum) or not require_gradient) and rind3sum > min_flux
 
-def finder_maker(max_size=100, min_size=0, min_sep_from_edge=50, min_flux=500,
+def finder_maker(max_size=100, min_size=0, min_sep_from_edge=5, min_flux=500,
                  edge_npix=10000,
                  progressbar=False,
                  rindsize=3, require_gradient=False, raise_for_nosources=True, *args, **kwargs):
@@ -73,7 +73,7 @@ def finder_maker(max_size=100, min_size=0, min_sep_from_edge=50, min_flux=500,
     distance from the edge of the image
     """
     # criteria are based on examining some plots; they probably don't hold universally
-    def saturated_finder(data, *args, raise_for_nosources=raise_for_nosources, **kwargs):
+    def saturated_finder(data, *args, raise_for_nosources=raise_for_nosources, rind_threshold=1000, **kwargs):
         """
         Wrap the star finder to reject bad stars
         """
@@ -105,6 +105,29 @@ def finder_maker(max_size=100, min_size=0, min_sep_from_edge=50, min_flux=500,
         coms = center_of_mass(saturated, sources, np.arange(nsources)+1)
         coms = np.array(coms)
 
+        # Create additional mask for rind threshold check using scipy tools
+        def check_rind_threshold(label_id, rindsz=3):
+            # Get the slice for this source using find_objects
+            src_slice = slices[label_id - 1]  # label_id is 1-indexed, slices is 0-indexed
+            # Expand slice by 3 pixels on each side
+            src_slice = (slice(max(0, src_slice[0].start - rindsz),
+                               min(data.shape[0], src_slice[0].stop + rindsz)),
+                        slice(max(0, src_slice[1].start - rindsz),
+                              min(data.shape[1], src_slice[1].stop + rindsz)))
+            src_mask = sources[src_slice] == label_id
+            # Create 3-pixel rind around the source
+            rind = ndimage.binary_dilation(src_mask, iterations=rindsz) & ~src_mask
+            # Check if sum of values in rind exceeds threshold
+            rind_sum = np.nansum(data[src_slice][rind])
+            return rind_sum > rind_threshold
+
+        # Apply rind threshold check to all sources
+        rind_ok = np.array([check_rind_threshold(label_id) for label_id in range(1, nsources + 1)])
+
+        # Update sources to only include those that pass rind threshold
+        print(f"Reduced nsources from {len(slices)} to {rind_ok.sum()} by applying rind threshold {rind_threshold}", flush=True)
+
+
         # progressbar isn't super necessary as this is rarely the bottleneck
         # (but I included it because I didn't know that up front)
         if progressbar:
@@ -119,7 +142,7 @@ def finder_maker(max_size=100, min_size=0, min_sep_from_edge=50, min_flux=500,
             (coms[:,1] < data.shape[1]-msfe) &
             (coms[:,0] < data.shape[0]-msfe)
         )
-        all_ok = sizes_ok & coms_finite & coms_inbounds
+        all_ok = sizes_ok & coms_finite & coms_inbounds & rind_ok
         is_star_ok = np.array([szok and is_star(data, sources, srcid+1, slcs, min_flux=min_flux, rindsize=rindsize)
                                for srcid, (szok, slcs) in enumerate(pb(zip(all_ok, slices)))])
         all_ok &= is_star_ok
@@ -149,7 +172,15 @@ def get_psf(header, path_prefix='.'):
     module = header['MODULE']
 
     ww = wcs.WCS(header)
+<<<<<<< HEAD
     #assert ww.wcs.cdelt[1] != 1
+=======
+    try:
+        assert ww.wcs.cdelt[1] != 1, "This is not a valid WCS!!! CDELT is wrong!! how did this HAPPEN!?!?"
+    except AssertionError as ex:
+        print(ex)
+        print("ignoring WCS failure so check that stuff is right...")
+>>>>>>> b0f29adb99fc78f846442b2515bd0f6cc5726ce3
 
     psfgen.filter = filtername
     obsdate = header['DATE-OBS']
@@ -273,7 +304,8 @@ def iteratively_remove_saturated_stars(data, header,
     #big_grid.fixed['x_0'] = True
     #big_grid.fixed['y_0'] = True
 
-    daogroup = SourceGrouper(min_separation=8)
+    # daogroup should be set super high to avoid fitting lots of "stars"... if there are a lot of saturated pixels near each other, they're probably all junk
+    daogroup = SourceGrouper(min_separation=25)
 
     resid = data
 
@@ -357,7 +389,7 @@ def iteratively_remove_saturated_stars(data, header,
 
         # an option here, to make this work at an earlier phase in the pipeline, is to *replace* the masked
         # pixels with the values from the fitted model.  This will be tricky.
-        print(f"Finished iteration with fit size={fitsz}, range={minsz}-{maxsz} with {len(result)} sources", flush=True)
+        print(f"Finished iteration with fit size={fitsz}, range={minsz}-{maxsz} with {len(result)} sources", flush=True, end='\n\n')
 
     final_table = table.vstack(results)
 
@@ -365,11 +397,13 @@ def iteratively_remove_saturated_stars(data, header,
 
 
 def remove_saturated_stars(filename, save_suffix='_unsatstar', **kwargs):
+    print(f"Removing saturated stars from {filename}", flush=True)
     fh = fits.open(filename)
     data = fh['SCI'].data
 
     # there are examples, especially in F405, where the variance is NaN but the value
     # is negative
+    print(f"Setting NaN variance to 0", flush=True)
     data[np.isnan(fh['VAR_POISSON'].data)] = 0
 
     header = fh[0].header
