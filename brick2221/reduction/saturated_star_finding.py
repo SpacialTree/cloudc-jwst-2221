@@ -434,9 +434,14 @@ def main():
     #fn = '/orange/adamginsburg/jwst/cloudc/F405N/pipeline/jw02221002001_02201_00001_nrcalong_destreak_o002_crf.fits'
     #remove_saturated_stars(fn, verbose=True)
 
-    for fn in glob.glob('/orange/adamginsburg/jwst/cloudc/F405N/pipeline/*_destreak_o002_crf.fits'):
-        print(f"Processing {fn}", flush=True)
-        remove_saturated_stars(fn, verbose=True)
+    #for fn in glob.glob('/orange/adamginsburg/jwst/cloudc/F405N/pipeline/*_destreak_o002_crf.fits'):
+    #    print(f"Processing {fn}", flush=True)
+    #    remove_saturated_stars(fn, verbose=True)
+
+    for filt in ['F410M', 'F466N', 'F182M', 'F187N', 'F212N']: # 'F405N'
+        for fn in glob.glob(f'/orange/adamginsburg/jwst/cloudc/{filt}/pipeline/*_destreak_o002_crf.fits'):
+            print(f"Processing {fn}", flush=True)
+            remove_saturated_stars(fn, verbose=True)
 
 if __name__ == "__main__":
     main()
